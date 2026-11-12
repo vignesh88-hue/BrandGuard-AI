@@ -396,6 +396,20 @@ def calculate_compliance_score(violations: list) -> int:
 
     return max(0, 100 - penalty)
 
+def verify_evidence(original_text: str, submitted_content: str) -> bool:
+    """
+    Verify that quoted violation evidence exists in submitted content.
+    """
+    import re
+
+    if not original_text or not original_text.strip():
+        return False
+
+    def normalize(text):
+        return re.sub(r"\s+", " ", text).strip().casefold()
+
+    return normalize(original_text) in normalize(submitted_content)
+
 
 def validate_result(result: dict,rules: list,original_content: str) -> dict:
     """
@@ -498,8 +512,45 @@ def validate_result(result: dict,rules: list,original_content: str) -> dict:
     # Calculate score using Python instead of trusting Gemini
     result["compliance_score"] = calculate_compliance_score(result["violations"])
 
-    # Determine status from validated violations
-    result["overall_status"] = ("needs_review" if result["violations"] else "approved")
+    # Verify every violation quotation against submitted content
+    verified_violations = []
+    invalid_evidence_count = 0
+
+    for violation in result["violations"]:
+      if verify_evidence(
+        violation["original_text"],
+        original_content
+    ):
+        verified_violations.append(violation)
+    else:
+        invalid_evidence_count += 1
+
+    result["violations"] = verified_violations
+
+    # Reject approval if Gemini provides unsupported evidence
+    if invalid_evidence_count > 0:
+      result["corrected_content"] = original_content
+      result["summary"] += (
+        f" {invalid_evidence_count} violation(s) contained "
+        "unverified evidence. Human verification is required."
+    )
+
+# Calculate score using verified violations only 
+    result["compliance_score"] = calculate_compliance_score(
+    result["violations"]
+)
+
+    # Determine final status
+    if (result["violations"]or not correction_valid or invalid_evidence_count > 0):  
+     result["overall_status"] = "needs_review"
+    else:
+     result["overall_status"] = "approved"
+
+    # # Determine status using violations AND correction validation
+    # if result["violations"] or not correction_valid:
+    #   result["overall_status"] = "needs_review"
+    # else:
+    #   result["overall_status"] = "approved"
 
     return result
 

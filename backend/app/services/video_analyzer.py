@@ -18,12 +18,16 @@ def validate_video_rule_results(
     violations: list
 ) -> bool:
     """
-    Validate every guideline evaluation.
-    Contradictory or insufficient evidence requires human review.
+    Validate guideline evaluations.
+    Inconsistent AI results are sent for human review
+    instead of crashing the video review.
     """
 
     if not isinstance(rule_results, list):
         raise ValueError("rule_results must be an array.")
+
+    if not isinstance(violations, list):
+        raise ValueError("violations must be an array.")
 
     if len(rule_results) != len(rules):
         raise ValueError(
@@ -31,12 +35,36 @@ def validate_video_rule_results(
         )
 
     evaluated_rules = set()
+    requires_human_review = False
+
+    # Normalize violation rule numbers.
+    valid_violations = []
+
+    for violation in violations:
+        if not isinstance(violation, dict):
+            requires_human_review = True
+            continue
+
+        number = violation.get("rule_number")
+
+        try:
+            number = int(number)
+        except (TypeError, ValueError):
+            requires_human_review = True
+            continue
+
+        if not 1 <= number <= len(rules):
+            requires_human_review = True
+            continue
+
+        violation["rule_number"] = number
+        valid_violations.append(violation)
+
+    violations[:] = valid_violations
 
     violation_rule_numbers = {
         item["rule_number"] for item in violations
     }
-
-    requires_human_review = False
 
     uncertainty_phrases = [
         "cannot be verified",
@@ -144,17 +172,11 @@ def validate_video_rule_results(
             for phrase in contradiction_phrases
         )
 
-        # Never accept a compliant result when its own
-        # evidence explicitly describes a violation.
         if (
             item["status"] == "compliant"
             and evidence_is_contradictory
         ):
             item["status"] = "not_verifiable"
-            item["evidence"] += (
-                " The evidence contradicts the compliant status. "
-                "Human verification is required."
-            )
             requires_human_review = True
 
         if (
@@ -164,16 +186,27 @@ def validate_video_rule_results(
             item["status"] = "not_verifiable"
             requires_human_review = True
 
-        if item["status"] == "violation":
-            if rule_number not in violation_rule_numbers:
-                raise ValueError(
-                    "A violation evaluation has no matching violation."
-                )
+        has_violation = (
+            rule_number in violation_rule_numbers
+        )
 
-        elif rule_number in violation_rule_numbers:
-            raise ValueError(
-                "A non-violation evaluation has a matching violation."
-            )
+        # Inconsistent AI output must never become
+        # an automatically approved violation.
+        if item["status"] == "violation" and not has_violation:
+            item["status"] = "not_verifiable"
+            requires_human_review = True
+
+        elif item["status"] != "violation" and has_violation:
+            item["status"] = "not_verifiable"
+
+            # Remove unsupported violation from scoring.
+            violations[:] = [
+                v for v in violations
+                if v["rule_number"] != rule_number
+            ]
+
+            violation_rule_numbers.discard(rule_number)
+            requires_human_review = True
 
         if item["status"] == "not_verifiable":
             requires_human_review = True
