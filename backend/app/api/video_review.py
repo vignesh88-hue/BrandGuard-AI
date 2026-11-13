@@ -188,6 +188,7 @@ def review_video(
             )
 
             result = analysis["review"]
+            ai_provider = analysis.get("ai_provider", "unknown")
 
             # 9. Incorporate speech transcription uncertainty
             speech_requires_review = (
@@ -270,6 +271,7 @@ def review_video(
                 "metadata": metadata,
                 "frames_analyzed": analysis["frames_analyzed"],
                 "analysis_type": analysis["analysis_type"],
+                "ai_provider": ai_provider,
                 "audio": audio_report,
                 "speech": speech_report,
                 "warnings": []
@@ -301,6 +303,7 @@ def review_video(
                 violations=result["violations"],
                 corrected_content=result["corrected_content"],
                 media_analysis=media_report,
+                ai_provider=ai_provider,
                 approval_status="pending"
             )
 
@@ -313,6 +316,7 @@ def review_video(
                 "status": "success",
                 "review_id": str(review_record.id),
                 "approval_status": review_record.approval_status,
+                "ai_provider": ai_provider,
                 "guideline": {
                     "id": str(guideline.id),
                     "filename": guideline.filename

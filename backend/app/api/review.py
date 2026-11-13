@@ -82,16 +82,19 @@ def review_content(
             rules=rules_data
         )
 
+        ai_provider = result.pop("_provider", "unknown")
+
         review_record = ContentReview(
-            guideline_id=guideline.id,
-            submitted_content=request.content,
-            compliance_score=result["compliance_score"],
-            overall_status=result["overall_status"],
-            summary=result["summary"],
-            violations=result["violations"],
-            corrected_content=result["corrected_content"],
-            approval_status="pending"
-        )
+        guideline_id=guideline.id,
+        submitted_content=request.content,
+        compliance_score=result["compliance_score"],
+        overall_status=result["overall_status"],
+        summary=result["summary"],
+        violations=result["violations"],
+        corrected_content=result["corrected_content"],
+        ai_provider=ai_provider,
+        approval_status="pending"
+)
 
         db.add(review_record)
         db.commit()
@@ -101,6 +104,7 @@ def review_content(
             "status": "success",
             "review_id": str(review_record.id),
             "approval_status": review_record.approval_status,
+            "ai_provider": review_record.ai_provider,
             "guideline": {
                 "id": str(guideline.id),
                 "filename": guideline.filename
@@ -159,6 +163,7 @@ def get_review_history(
                 "compliance_score": review.compliance_score,
                 "overall_status": review.overall_status,
                 "approval_status": review.approval_status,
+                "ai_provider": review.ai_provider,
                 "summary": review.summary,
                 "created_at": review.created_at.isoformat(),
                 "submitted_content": review.submitted_content
@@ -200,6 +205,7 @@ def get_review_details(
         "guideline_id": str(review.guideline_id),
         "guideline_filename": filename,
         "submitted_content": review.submitted_content,
+        "ai_provider": review.ai_provider,
         "compliance_score": review.compliance_score,
         "overall_status": review.overall_status,
         "approval_status": review.approval_status,

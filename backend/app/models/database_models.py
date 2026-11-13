@@ -181,6 +181,11 @@ class ContentReview(Base):
         Text
     )
 
+    ai_provider = Column(
+        String(20),
+        nullable=True
+    )
+
     approval_status = Column(
         String(30),
         nullable=False,

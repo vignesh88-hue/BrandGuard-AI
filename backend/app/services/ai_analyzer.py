@@ -5,6 +5,7 @@ import time
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from app.services.ai_orchestrator import generate_ai_response
 
 load_dotenv()
 
@@ -557,7 +558,9 @@ def validate_result(result: dict,rules: list,original_content: str) -> dict:
 
 def analyze_brand_content(content: str, rules: list) -> dict:
     """
-    Analyse submitted content against approved brand guidelines.
+    Analyse submitted content using Gemini with Groq fallback.
+    Validate every provider's response using the existing
+    BrandGuard validation system.
     """
 
     if not content or not content.strip():
@@ -568,58 +571,14 @@ def analyze_brand_content(content: str, rules: list) -> dict:
 
     prompt = build_prompt(content, rules)
 
-    max_attempts = 3
+    try:
+        # Gemini primary, Groq fallback
+        result = generate_ai_response(prompt)
 
-    for attempt in range(max_attempts):
+        # Existing validation remains unchanged
+        return validate_result(result, rules, content)
 
-        try:
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.1
-                )
-            )
-
-            if not response.text:
-                raise ValueError("Gemini returned an empty response.")
-
-            result = json.loads(response.text)
-
-            return validate_result(result, rules, content)
-
-        except Exception as e:
-
-            error_message = str(e).lower()
-
-            temporary_error = any(
-                code in error_message
-                for code in (
-                    "429",
-                    "500",
-                    "502",
-                    "503",
-                    "504",
-                    "unavailable",
-                    "resource_exhausted",
-                    "timeout"
-                )
-            )
-
-            if temporary_error and attempt < max_attempts - 1:
-                wait_seconds = 2 ** (attempt + 1)
-
-                print(
-                    f"Gemini temporarily unavailable. "
-                    f"Retrying in {wait_seconds} seconds..."
-                )
-
-                time.sleep(wait_seconds)
-                continue
-
-            raise RuntimeError(
-                f"Brand analysis failed: {str(e)}"
-            ) from e
-
-    raise RuntimeError("Brand analysis failed after all retry attempts.")
+    except Exception as error:
+        raise RuntimeError(
+            f"Brand analysis failed: {str(error)}"
+        ) from error
